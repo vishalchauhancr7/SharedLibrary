@@ -1,0 +1,32 @@
+@Library('OpicsDevOps')_
+
+def node_label ='BLRVSWCMRE13.misys.global.ad'
+def GIT_WA = 'C:\\GIT_WA\\4.4_Rel4.4_PipelineCTS\\Rel4.4'
+
+pipeline{
+    
+	 agent none;
+ 
+    stages {
+
+		stage('\u27A1 Rel4.4 WorkArea Update') {
+		
+			agent {
+				label{
+					 label node_label
+					 customWorkspace GIT_WA
+				}
+			}
+
+            steps {
+					checkout scm
+					echo 'hello Guys'
+            }
+
+        }
+	}
+		
+
+
+
+}

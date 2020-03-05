@@ -1,0 +1,242 @@
+@Library('OpicsDevOps')_
+def Nightly_build_label = 'BLRCSWOPXVM0031'
+//def Nightly_build_label = 'BLRCSWOPICS0077'
+def isBuild_OK =true
+def ddt_flag ='true'
+
+pipeline{
+    
+	agent none;
+ 
+    stages {
+	
+		stage('BLRCSWOPXVM0031 \u27A1 Update WA') {		
+			agent {
+				label{
+				label Nightly_build_label
+				customWorkspace "C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0"
+				}
+			}
+            steps {
+				Checkout('master','opics4plus')	
+				// bat 'copy C:\\sonar_prop\\sonar-project.properties C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0'
+				// bat 'echo Updating the Message Resource File ...'
+				// bat 'perl \\\\blrwinopfilsrv01\\Opics_Buildtools\\GitBuildConfig\\Rel4.x\\MsgMerge.pl'
+            }
+        }
+	
+		stage('BLRCSWOPXVM0031 \u27A1 Update FOGC WA') {		
+			agent {
+				label{
+					label Nightly_build_label
+					customWorkspace "C:\\GIT_WA\\4.0.0.0_FOGC\\Rel4.0"
+				}
+			}
+            steps {
+				Checkout('master','FOGC')				
+			}
+        }		
+		
+		stage('BLRCSWOPXVM0031 \u27A1 Build Update') {		
+			agent {
+				label{
+				label Nightly_build_label
+				customWorkspace "C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0"
+				}
+			}
+            steps {
+				// Checkout('master','opics4plus')	
+				bat 'copy C:\\sonar_prop\\sonar-project.properties C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0'
+				bat 'echo Updating the Message Resource File ...'
+				bat 'perl \\\\blrwinopfilsrv01\\Opics_Buildtools\\GitBuildConfig\\Rel4.x\\MsgMerge.pl'
+            }
+        }
+		
+		stage('\u27A1 Sonar Run') {
+			agent {
+				label{
+					label Nightly_build_label
+					customWorkspace "C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0"
+				}
+			}
+			steps {
+				script{
+					try{
+						withSonarQubeEnv('alm-sonar') {
+					    bat 'C:\\Sonar_Scanner\\bin\\sonar-scanner.bat -X -Djavax.net.ssl.trustStore="C:\\Java\\jre1.8.0_181\\lib\\security\\cacerts"' 
+						// echo 'skipping'
+					}						
+					}catch(e){
+						isBuild_OK =false
+						echo e.toString()
+					}
+				}
+			}
+		}
+		stage('\u27A1 Compilaton'){
+			agent {
+				label{
+					label Nightly_build_label
+					customWorkspace "C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0"
+				}
+			}
+			steps{
+				map_networkDrive('Nightly')
+				Build_GIT_nightly('trunk','trunk')
+			}
+		}
+		stage('\u27A1 Code Signing'){
+			agent {
+				label{
+					label Nightly_build_label
+					customWorkspace "C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0"
+				}
+			}
+			steps{			
+			//	codeSigning('trunk')	
+				echo 'skipping code signing'			
+			}		
+		}
+		stage('\u27A1 Sonar Status'){			
+			agent {
+				label{
+					label Nightly_build_label
+					customWorkspace "C:\\GIT_WA\\4.0.0.0_trunk\\Rel4.0"
+				}
+			}			
+			steps{
+				script{
+					try{
+						SonarAnalysisReport('trunk')
+						echo 'skipping'
+					}catch(e){
+						isBuild_OK =false
+						echo e.toString()
+					}
+				}
+			}		
+		}
+		stage('\u27A1 Build Status '){			
+			steps{			    
+			    script{
+					echo "currentResult:${currentBuild.currentResult}"
+				//	if(isBuild_OK) {
+				//			currentBuild.result = "SUCCESS"
+				//	} else {
+				//			currentBuild.result = "FAILURE"
+				//	}
+				//	echo currentBuild.result
+			    }				
+			}		
+		}		
+		stage('\u27A1 FOGC Compilaton'){			
+			agent {
+				label{
+					label Nightly_build_label
+					customWorkspace "C:\\GIT_WA\\4.0.0.0_FOGC\\Rel4.0"
+				}
+			}			
+			steps{
+				map_networkDrive('Nightly')
+				Build_GIT_nightly('FOGC','trunk')
+			}		
+		}
+		stage('Maven Build : FFC'){
+            agent{
+                label{
+					label Nightly_build_label
+                    customWorkspace "C:\\GIT_WA\\4.0.0.0_FOGC\\Rel4.0"
+                }
+            }
+            steps {
+                mavenBuild_Gen('FOGC')
+            }
+        }
+        stage('BuildMachine09 \u27A1 Updating docker and DDT distribution area'){
+			agent {
+				label{
+					 label "BLRVSWCMRE03.misys.global.ad"	
+				}
+			}
+			steps {
+				script{
+						
+			            Update_docker_DDT_Dist('trunk');
+				}
+            }
+		
+		}
+        
+		stage('BLRVSWCMRE09 \u27A1 Setup Creation'){
+			agent {
+				label{
+					 label "BLRVSWCMRE09.misys.global.ad"	
+				}
+			}
+			steps {
+				script{
+			        SetupCreation('trunk',Nightly_build_label);
+				}
+			}		
+		}
+		stage('BLRVSWCMRE03 \u27A1 DBScript Execution'){
+			agent {
+				label{
+					 label "BLRVSWCMRE09.misys.global.ad"	
+				}
+			}
+			steps {
+				DBScriptExecution('trunk')
+            }	
+		}
+		stage('Copying Maven Aritifacts to Build folder'){
+            agent {
+                label{
+                    label Nightly_build_label
+                    customWorkspace "C:\\GIT_WA\\4.0.0.0_FOGC\\Rel4.0"
+                }
+            }
+            steps {
+                CopymavenArtifacts('trunk',env.WORKSPACE)
+                //echo "Skiiping maven copy"
+            }
+        }
+		
+		stage('Triggering Remote Job for DDT'){
+            agent {
+                label{
+                    label Nightly_build_label
+                    customWorkspace "C:\\GIT_WA\\4.0.0.0_FOGC\\Rel4.0"
+                }
+            }
+            steps {
+				script{
+						
+						triggerRemoteJob auth: CredentialsAuth(credentials: '628e04bc-0b21-449f-8c81-937814bfdb83'),
+						blockBuildUntilComplete: false,
+						job: 'Opics_DDT_Nightly',
+						pollInterval: 300,
+						remoteJenkinsName: 'blrcswopics0095.misys.global.ad'
+					
+				}
+				
+            }
+        }
+		
+    }  
+  post {
+        failure {
+			script{
+			    def BuildStatus =currentBuild.currentResult
+			    emailNotification_failure(BuildStatus)			
+			}
+        }
+		success {
+			script{
+			    def BuildStatus =currentBuild.currentResult
+			    emailNotification_backtoNormal(BuildStatus)
+			}
+			
+		}
+	}
+}
